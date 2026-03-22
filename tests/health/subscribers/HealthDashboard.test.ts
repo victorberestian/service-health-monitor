@@ -2,7 +2,7 @@ import { strict as assert } from 'assert';
 import { Broker } from '../../../src/broker';
 import { WindowManager } from '../../../src/window-manager';
 import { HealthMonitorService } from '../../../src/health/services';
-import { listenHealthDashboard, HEALTH_WINDOW_ID } from '../../../src/health/subscribers/HealthDashboard';
+import { listenHealthDashboard, HEALTH_WINDOW_ID } from '../../../src/health/subscribers/';
 import { HealthTopicsEnum, IHealthSnapshot, IStatusChangedPayload } from '../../../src/health/interfaces';
 
 describe('listenHealthDashboard', () => {
