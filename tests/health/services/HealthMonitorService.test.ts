@@ -1,13 +1,13 @@
 import { strict as assert } from 'assert';
 import sinon from 'sinon';
-import { Broker } from '../../src/broker';
-import { HealthMonitorService } from '../../src/health/services/HealthMonitorService';
+import { Broker } from '../../../src/broker';
+import { HealthMonitorService } from '../../../src/health/services';
 import {
     ServiceStateEnum,
     HealthTopicsEnum,
     IStatusChangedPayload,
     IHealthSnapshot
-} from '../../src/health/interfaces';
+} from '../../../src/health/interfaces';
 
 describe('HealthMonitorService', () => {
     let clock: sinon.SinonFakeTimers;
