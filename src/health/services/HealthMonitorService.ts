@@ -16,6 +16,15 @@ const DEFAULT_OPTIONS: IHealthMonitorOptions = {
     heartbeatTimeoutMs: 30_000
 };
 
+/**
+ * Monitors the health of registered services via broker heartbeats and error reports.
+ *
+ * Each service has a state machine (see {@link ServiceStateEnum}) and a watchdog timer
+ * that fires when heartbeats stop arriving. State transitions emit STATUS_CHANGED on
+ * the broker. The monitor also answers SNAPSHOT_REQUEST messages with a full snapshot.
+ *
+ * Does not import any service directly — all communication is through the broker.
+ */
 export class HealthMonitorService {
     private readonly broker: Broker;
     private readonly services: Map<string, IMutableServiceHealth> = new Map();
@@ -25,6 +34,10 @@ export class HealthMonitorService {
     private readonly unsubscribeErrorReport: () => void;
     private readonly unsubscribeSnapshotRequest: () => void;
 
+    /**
+     * @param broker - Application message broker
+     * @param options - Optional configuration overrides
+     */
     constructor(broker: Broker, options?: Partial<IHealthMonitorOptions>) {
         this.broker = broker;
         this.options = { ...DEFAULT_OPTIONS, ...options };
@@ -51,6 +64,12 @@ export class HealthMonitorService {
         );
     }
 
+    /**
+     * Register a service for health monitoring.
+     * No-op if the service is already registered (idempotent).
+     *
+     * @param name - Unique service name
+     */
     register(name: string): void {
         if (this.services.has(name)) {
             return;
@@ -65,6 +84,12 @@ export class HealthMonitorService {
         });
     }
 
+    /**
+     * Transition a service from REGISTERED to STARTING.
+     * No-op if the service is not in REGISTERED state.
+     *
+     * @param name - Service name
+     */
     markStarting(name: string): void {
         const service = this.services.get(name);
         if (!service) {
@@ -78,6 +103,12 @@ export class HealthMonitorService {
         this.changeStatus(service, ServiceStateEnum.STARTING);
     }
 
+    /**
+     * Transition a service to HEALTHY and start the heartbeat watchdog timer.
+     * Emits STATUS_CHANGED if the state changes.
+     *
+     * @param name - Service name
+     */
     markHealthy(name: string): void {
         const service = this.services.get(name);
         if (!service) {
@@ -89,6 +120,13 @@ export class HealthMonitorService {
         this.resetHeartbeatTimer(name);
     }
 
+    /**
+     * Transition a service to FAILED and clear its watchdog timer.
+     * Emits STATUS_CHANGED if the state changes.
+     *
+     * @param name - Service name
+     * @param error - Optional error message that caused the failure
+     */
     markFailed(name: string, error?: string): void {
         const service = this.services.get(name);
         if (!service) {
@@ -104,6 +142,11 @@ export class HealthMonitorService {
         this.changeStatus(service, ServiceStateEnum.FAILED);
     }
 
+    /**
+     * Returns a point-in-time snapshot of all registered service health states.
+     *
+     * @returns Immutable snapshot
+     */
     getSnapshot(): IHealthSnapshot {
         const services: IServiceHealth[] = [...this.services.values()].map(
             (service: IMutableServiceHealth): IServiceHealth => ({
@@ -118,6 +161,10 @@ export class HealthMonitorService {
         return { services, timestamp: Date.now() };
     }
 
+    /**
+     * Unsubscribe all broker listeners and clear all watchdog timers.
+     * After destroy() the monitor is inert.
+     */
     destroy(): void {
         this.unsubscribeHeartbeat();
         this.unsubscribeErrorReport();
@@ -128,6 +175,12 @@ export class HealthMonitorService {
         }
     }
 
+    /**
+     * Handles heartbeat resets timers.
+     *
+     * @param serviceName
+     * @private
+     */
     private handleHeartbeat(serviceName: string): void {
         const service = this.services.get(serviceName);
         if (!service) {
@@ -151,6 +204,13 @@ export class HealthMonitorService {
         this.resetHeartbeatTimer(serviceName);
     }
 
+    /**
+     * Receives error report, change status to unhealthy and writes error, resets heartbeat timer.
+     *
+     * @param serviceName - string
+     * @param error - string
+     * @private
+     */
     private handleErrorReport(serviceName: string, error: string): void {
         const service = this.services.get(serviceName);
         if (!service) {
@@ -168,6 +228,14 @@ export class HealthMonitorService {
         this.resetHeartbeatTimer(serviceName);
     }
 
+    /**
+     * Mutate state and emit STATUS_CHANGED only when the state actually changes
+     *
+     * @param service - IMutableServiceHealth
+     * @param newState - ServiceStateEnum
+     *
+     * @private
+     */
     private changeStatus(service: IMutableServiceHealth, newState: ServiceStateEnum): void {
         const prevState = service.state;
 
@@ -193,6 +261,12 @@ export class HealthMonitorService {
         this.broker.send<IStatusChangedPayload>(HealthTopicsEnum.STATUS_CHANGED, payload);
     }
 
+    /**
+     * Resets timer of heartbeat for service
+     *
+     * @param serviceName
+     * @private
+     */
     private resetHeartbeatTimer(serviceName: string): void {
         this.clearTimer(serviceName);
 
@@ -216,6 +290,12 @@ export class HealthMonitorService {
         this.heartbeatTimers.set(serviceName, timer);
     }
 
+    /**
+     * Removes timer for map of timers by service name.
+     *
+     * @param serviceName
+     * @private
+     */
     private clearTimer(serviceName: string): void {
         const existing = this.heartbeatTimers.get(serviceName);
         if (existing === undefined) {
