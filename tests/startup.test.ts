@@ -84,6 +84,24 @@ describe('startupServices', () => {
             assert.ok(services.every((s) => s.state === ServiceStateEnum.HEALTHY));
         });
 
+        it('transitions each service through STARTING before HEALTHY', async () => {
+            const observedStates: string[] = [];
+
+            const trackingAdapter: ServiceRegistration['adapter'] = async (_f, _b) => {
+                observedStates.push(monitor.getSnapshot().services[0].state);
+                return { name: 'svc', dispose: async () => {} };
+            };
+
+            await startupServices(
+                [{ name: 'svc', factory: { build: async () => ({}) } as ServiceFactory<unknown>, adapter: trackingAdapter }],
+                broker,
+                monitor
+            );
+
+            assert.equal(observedStates[0], ServiceStateEnum.STARTING);
+            assert.equal(monitor.getSnapshot().services[0].state, ServiceStateEnum.HEALTHY);
+        });
+
         it('emits SERVICE_INITIALIZED for each successful service', async () => {
             const initialized: string[] = [];
             broker.on<{ name: string }>(APPLICATION_ACTIONS.SERVICE_INITIALIZED, ({ name }) => {
@@ -121,10 +139,12 @@ describe('startupServices', () => {
             assert.equal(services[0].lastError, 'adapter error');
         });
 
-        it('emits SERVICE_FAILED for each failed service', async () => {
+        it('emits SERVICE_FAILED with name and error message', async () => {
             let failedName = '';
-            broker.on<{ name: string; error: string }>(APPLICATION_ACTIONS.SERVICE_FAILED, ({ name }) => {
+            let failedError = '';
+            broker.on<{ name: string; error: string }>(APPLICATION_ACTIONS.SERVICE_FAILED, ({ name, error }) => {
                 failedName = name;
+                failedError = error;
             });
 
             await startupServices(
@@ -134,6 +154,7 @@ describe('startupServices', () => {
             );
 
             assert.equal(failedName, 'svc');
+            assert.equal(failedError, 'adapter error');
         });
 
         it('continues initialising remaining services after a failure', async () => {
